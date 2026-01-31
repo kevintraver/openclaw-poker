@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, internalMutation } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { generateApiKey, generateClaimCode, hashApiKey } from "./model/auth";
 
 const STARTING_SHELLS = 100;
@@ -152,6 +152,47 @@ export const leaderboard = query({
         : "N/A",
       netProfit: agent.totalWinnings - agent.totalLosses,
     }));
+  },
+});
+
+/**
+ * Authenticate agent by API key (internal only)
+ */
+export const authenticate = internalQuery({
+  args: {
+    apiKey: v.string(),
+  },
+  handler: async (ctx, { apiKey }) => {
+    const hash = hashApiKey(apiKey);
+
+    const agent = await ctx.db
+      .query("agents")
+      .withIndex("by_apiKeyHash", (q) => q.eq("apiKeyHash", hash))
+      .first();
+
+    if (!agent) {
+      return null;
+    }
+
+    // Verify full key matches (hash collision protection)
+    if (agent.apiKey !== apiKey) {
+      return null;
+    }
+
+    return {
+      agentId: agent._id,
+      agent: {
+        _id: agent._id,
+        name: agent.name,
+        description: agent.description,
+        shells: agent.shells,
+        handsPlayed: agent.handsPlayed,
+        handsWon: agent.handsWon,
+        totalWinnings: agent.totalWinnings,
+        totalLosses: agent.totalLosses,
+        claimedAt: agent.claimedAt,
+      },
+    };
   },
 });
 

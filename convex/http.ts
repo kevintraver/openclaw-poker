@@ -1,7 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal, api } from "./_generated/api";
-import { extractApiKey, authenticateAgent } from "./model/auth";
+import { extractApiKey } from "./model/auth";
 
 const http = httpRouter();
 
@@ -77,7 +77,7 @@ async function withAuth(
     return errorResponse("Missing Authorization header", 401);
   }
 
-  const auth = await authenticateAgent(ctx, apiKey);
+  const auth = await ctx.runQuery(internal.agents.authenticate, { apiKey });
   if (!auth) {
     return errorResponse("Invalid API key", 401);
   }
