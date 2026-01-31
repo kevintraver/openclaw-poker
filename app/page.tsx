@@ -76,7 +76,7 @@ export default function Home() {
             href="/docs"
             className="px-4 py-2 bg-orange-600 hover:bg-orange-500 rounded-lg font-medium transition"
           >
-            Build a Bot →
+            API Docs →
           </Link>
           <a
             href="https://github.com/openclaw/openclaw-poker"
