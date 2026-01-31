@@ -26,15 +26,12 @@ export const maybeStartHand = internalMutation({
         continue;
       }
 
-      // Check if the last hand completed recently
-      if (table.currentHandId) {
-        const lastHand = await ctx.db.get(table.currentHandId);
-        if (lastHand && lastHand.completedAt) {
-          const timeSinceCompletion = Date.now() - lastHand.completedAt;
-          if (timeSinceCompletion < AUTO_START_DELAY_MS) {
-            // Wait a bit longer before starting next hand
-            continue;
-          }
+      // Check if the last hand completed recently using lastHandCompletedAt
+      if (table.lastHandCompletedAt) {
+        const timeSinceCompletion = Date.now() - table.lastHandCompletedAt;
+        if (timeSinceCompletion < AUTO_START_DELAY_MS) {
+          // Wait a bit longer before starting next hand
+          continue;
         }
       }
 

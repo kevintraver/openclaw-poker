@@ -77,15 +77,19 @@ export async function startHand(
     winners: undefined,
   });
 
-  // Update table
+  // Update table with new dealer seat FIRST
   await ctx.db.patch(tableId, {
     status: "playing",
     currentHandId: handId,
     dealerSeat: newDealerSeat,
   });
 
-  // Post blinds
-  await postBlinds(ctx, handId, table, players);
+  // Fetch updated table to get correct dealer seat
+  const updatedTable = await ctx.db.get(tableId);
+  if (!updatedTable) throw new Error("Table not found after update");
+
+  // Post blinds with updated table
+  await postBlinds(ctx, handId, updatedTable, players);
 
   return handId;
 }
@@ -145,8 +149,10 @@ async function postBlinds(
 
   // Post big blind
   const bbPlayerIndex = updatedPlayers.findIndex((p) => p.seatIndex === bbSeatIndex);
+  let actualBB = table.bigBlind;
   if (bbPlayerIndex !== -1) {
     const bbAmount = Math.min(table.bigBlind, updatedPlayers[bbPlayerIndex].stack);
+    actualBB = bbAmount; // Track actual BB posted (may be short if all-in)
     updatedPlayers[bbPlayerIndex] = {
       ...updatedPlayers[bbPlayerIndex],
       currentBet: bbAmount,
@@ -162,8 +168,8 @@ async function postBlinds(
   await ctx.db.patch(handId, {
     players: updatedPlayers,
     pot,
-    currentBet: table.bigBlind,
-    lastRaiseAmount: table.bigBlind, // Initial raise from 0 to BB
+    currentBet: actualBB, // Use actual BB posted, not table BB
+    lastRaiseAmount: actualBB, // Initial raise based on actual BB posted
     actionOn: firstToActIndex,
     actionDeadline: Date.now() + ACTION_TIMEOUT_MS,
   });
@@ -185,12 +191,18 @@ export async function processAction(
   handId: Id<"hands">,
   agentId: Id<"agents">,
   action: "fold" | "check" | "call" | "bet" | "raise" | "all-in",
-  amount?: number
+  amount?: number,
+  reason?: "player" | "timeout" | "auto"
 ): Promise<void> {
   const hand = await ctx.db.get(handId);
   if (!hand) throw new Error("Hand not found");
   if (hand.status === "complete" || hand.status === "showdown") {
     throw new Error("Hand is complete");
+  }
+
+  // Check timeout with 1 second grace period for network latency
+  if (hand.actionDeadline && Date.now() > hand.actionDeadline + 1000) {
+    throw new Error("Action deadline expired");
   }
 
   const playerIndex = hand.players.findIndex((p) => p.agentId === agentId);
@@ -285,13 +297,14 @@ export async function processAction(
     }
   }
 
-  // Log the action
+  // Log the action with reason
   await ctx.db.insert("actions", {
     handId,
     agentId,
     action,
     amount,
     timestamp: Date.now(),
+    reason: reason ?? "player",
   });
 
   // Find next player to act
@@ -551,11 +564,15 @@ async function showdown(
     }
   }
 
-  // Convert to winners array
-  const winners: { agentId: Id<"agents">; amount: number; hand: string }[] = [];
+  // Convert to winners array with enriched data
+  const winners: { agentId: Id<"agents">; agentName?: string; seatIndex?: number; amount: number; hand?: string }[] = [];
   for (const [agentId, amount] of totalWinnings.entries()) {
+    const player = players.find(p => p.agentId === agentId);
+    const agent = await ctx.db.get(agentId);
     winners.push({
       agentId,
+      agentName: agent?.name ?? "Unknown",
+      seatIndex: player?.seatIndex ?? 0,
       amount,
       hand: winningHands.get(agentId) || "Unknown",
     });
@@ -600,7 +617,14 @@ async function awardPot(
     totalWinnings = pot;
   }
 
-  const winners = [{ agentId: winner.agentId, amount: totalWinnings, hand: "Others folded" }];
+  const agent = await ctx.db.get(winner.agentId);
+  const winners: { agentId: Id<"agents">; agentName?: string; seatIndex?: number; amount: number; hand?: string }[] = [{
+    agentId: winner.agentId,
+    agentName: agent?.name ?? "Unknown",
+    seatIndex: winner.seatIndex,
+    amount: totalWinnings,
+    hand: "Others folded"
+  }];
 
   await ctx.db.patch(handId, {
     status: "complete",
@@ -655,6 +679,7 @@ async function awardWinnings(
     seats: updatedSeats,
     status: "between_hands",
     currentHandId: undefined,
+    lastHandCompletedAt: Date.now(),
   });
 }
 
@@ -668,6 +693,9 @@ export function getPlayerView(
 ): object {
   const playerIndex = hand.players.findIndex((p) => p.agentId === agentId);
   const player = hand.players[playerIndex];
+
+  // Only show opponent hole cards if hand went to showdown (not if ended by folds)
+  const wentToShowdown = hand.status === "complete" && hand.communityCards.length >= 3;
 
   return {
     handId: hand._id,
@@ -687,9 +715,9 @@ export function getPlayerView(
       folded: p.folded,
       allIn: p.allIn,
       isYou: i === playerIndex,
-      // Only show hole cards at showdown or if it's the player
+      // Show own cards always, opponent cards only at showdown
       holeCards:
-        hand.status === "complete" || i === playerIndex
+        i === playerIndex || wentToShowdown
           ? p.holeCards
           : undefined,
     })),
@@ -729,10 +757,11 @@ function getValidActions(
   if (player.stack > 0) {
     const lastRaise = hand.lastRaiseAmount ?? bigBlind ?? 1;
     const minRaise = hand.currentBet + lastRaise;
+    const minBet = bigBlind ?? 1; // Use BB as minimum bet for no-limit
 
     if (hand.currentBet === 0) {
       // First bet on this street
-      actions.push({ action: "bet", minAmount: 1, maxAmount: player.stack });
+      actions.push({ action: "bet", minAmount: minBet, maxAmount: player.stack });
     } else if (player.stack + player.currentBet > hand.currentBet) {
       // Can raise
       actions.push({

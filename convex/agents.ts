@@ -156,6 +156,40 @@ export const leaderboard = query({
 });
 
 /**
+ * Get agent by API key (for client-side auth)
+ */
+export const getByApiKey = query({
+  args: {
+    apiKey: v.string(),
+  },
+  handler: async (ctx, { apiKey }) => {
+    const hash = hashApiKey(apiKey);
+
+    const agent = await ctx.db
+      .query("agents")
+      .withIndex("by_apiKeyHash", (q) => q.eq("apiKeyHash", hash))
+      .first();
+
+    if (!agent) {
+      return null;
+    }
+
+    // Verify full key matches (hash collision protection)
+    if (agent.apiKey !== apiKey) {
+      return null;
+    }
+
+    return {
+      _id: agent._id,
+      name: agent.name,
+      shells: agent.shells,
+      handsPlayed: agent.handsPlayed,
+      handsWon: agent.handsWon,
+    };
+  },
+});
+
+/**
  * Authenticate agent by API key (internal only)
  */
 export const authenticate = internalQuery({

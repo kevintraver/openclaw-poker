@@ -50,6 +50,7 @@ export default defineSchema({
     // Current hand state (if playing)
     currentHandId: v.optional(v.id("hands")),
     dealerSeat: v.number(), // Button position
+    lastHandCompletedAt: v.optional(v.number()), // Timestamp of last hand completion
     createdAt: v.number(),
   }).index("by_status", ["status"]),
 
@@ -108,6 +109,8 @@ export default defineSchema({
       v.array(
         v.object({
           agentId: v.id("agents"),
+          agentName: v.optional(v.string()), // Optional for backward compatibility
+          seatIndex: v.optional(v.number()), // Optional for backward compatibility
           amount: v.number(),
           hand: v.optional(v.string()), // Hand description
         })
@@ -131,5 +134,10 @@ export default defineSchema({
     ),
     amount: v.optional(v.number()),
     timestamp: v.number(),
+    reason: v.optional(v.union(
+      v.literal("player"),
+      v.literal("timeout"),
+      v.literal("auto")
+    )),
   }).index("by_handId", ["handId"]),
 });

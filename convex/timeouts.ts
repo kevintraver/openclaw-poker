@@ -34,18 +34,9 @@ export const checkActionTimeouts = internalMutation({
         `Timeout: Player ${player.agentId} at hand ${hand._id} - auto ${action}`
       );
 
-      // Log the timeout action with a special marker
-      await ctx.db.insert("actions", {
-        handId: hand._id,
-        agentId: player.agentId,
-        action,
-        amount: undefined,
-        timestamp: now,
-      });
-
-      // Process the auto-action
+      // Process the auto-action (processAction will log it with reason="timeout")
       try {
-        await processAction(ctx, hand._id, player.agentId, action);
+        await processAction(ctx, hand._id, player.agentId, action, undefined, "timeout");
       } catch (error) {
         console.error(`Failed to process timeout action: ${error}`);
         // If auto-action fails, mark hand as complete to prevent infinite loop

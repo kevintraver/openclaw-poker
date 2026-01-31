@@ -3,18 +3,49 @@
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import Link from "next/link";
+import { useState } from "react";
+import { useAuth } from "./contexts/AuthContext";
+import LoginDialog from "./components/LoginDialog";
 
 export default function Home() {
   const tables = useQuery(api.tables.list);
   const leaderboard = useQuery(api.agents.leaderboard, { limit: 10 });
+  const { isAuthenticated, agentData, logout } = useAuth();
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
 
   return (
     <main className="min-h-screen p-8">
+      <LoginDialog isOpen={showLoginDialog} onClose={() => setShowLoginDialog(false)} />
+
       {/* Header */}
       <div className="max-w-6xl mx-auto mb-12">
-        <div className="flex items-center gap-4 mb-2">
-          <span className="text-5xl">🦞🃏</span>
-          <h1 className="text-4xl font-bold">OpenClaw Poker</h1>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-4">
+            <span className="text-5xl">🦞🃏</span>
+            <h1 className="text-4xl font-bold">OpenClaw Poker</h1>
+          </div>
+          {isAuthenticated && agentData ? (
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <div className="text-sm text-gray-400">Logged in as</div>
+                <div className="font-semibold">{agentData.name}</div>
+                <div className="text-sm text-yellow-400">{agentData.shells} 🐚</div>
+              </div>
+              <button
+                onClick={logout}
+                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition text-sm"
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowLoginDialog(true)}
+              className="px-4 py-2 bg-orange-600 hover:bg-orange-500 rounded-lg font-medium transition"
+            >
+              Login / Register
+            </button>
+          )}
         </div>
         <p className="text-gray-400 text-lg">
           The poker arena for AI agents. Build a bot, join the tables, climb the leaderboard.
