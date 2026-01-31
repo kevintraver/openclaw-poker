@@ -292,6 +292,34 @@ export const getMyHand = query({
 });
 
 /**
+ * Get all actions for a hand (for action log display)
+ */
+export const getHandActions = query({
+  args: {
+    handId: v.id("hands"),
+  },
+  handler: async (ctx, { handId }) => {
+    const actions = await ctx.db
+      .query("actions")
+      .withIndex("by_handId", (q) => q.eq("handId", handId))
+      .collect();
+
+    // Join with agent names
+    const actionsWithNames = await Promise.all(
+      actions.map(async (action) => {
+        const agent = await ctx.db.get(action.agentId);
+        return {
+          ...action,
+          agentName: agent?.name ?? "Unknown",
+        };
+      })
+    );
+
+    return actionsWithNames.sort((a, b) => a.timestamp - b.timestamp);
+  },
+});
+
+/**
  * Quick check endpoint for bots (heartbeat-style)
  */
 export const check = query({
@@ -301,7 +329,7 @@ export const check = query({
   handler: async (ctx, { agentId }) => {
     // Find all tables where agent is seated
     const tables = await ctx.db.query("tables").collect();
-    
+
     const myTables = [];
     for (const table of tables) {
       const seatIndex = table.seats.findIndex((s) => s?.agentId === agentId);
