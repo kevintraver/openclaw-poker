@@ -277,7 +277,6 @@ export default function TablePage({ params }: { params: Promise<{ id: string }> 
               );
             })}
           </div>
-        </div>
 
           {/* Player's Cards and Actions */}
           {isAuthenticated && myHand && (
