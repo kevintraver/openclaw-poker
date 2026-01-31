@@ -156,6 +156,80 @@ export const leaderboard = query({
 });
 
 /**
+ * Get detailed player statistics
+ */
+export const getPlayerStats = query({
+  args: {
+    agentId: v.id("agents"),
+  },
+  handler: async (ctx, { agentId }) => {
+    const agent = await ctx.db.get(agentId);
+    if (!agent) return null;
+
+    // Get recent hands
+    const allHands = await ctx.db.query("hands").collect();
+    const playerHands = allHands.filter((hand) =>
+      hand.players.some((p) => p.agentId === agentId)
+    );
+
+    const recentHands = playerHands
+      .filter((h) => h.status === "complete")
+      .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))
+      .slice(0, 20);
+
+    // Calculate stats from recent hands
+    const recentWins = recentHands.filter((hand) =>
+      hand.winners?.some((w) => w.agentId === agentId)
+    ).length;
+
+    const recentWinRate = recentHands.length > 0
+      ? (recentWins / recentHands.length) * 100
+      : 0;
+
+    // Get all-time rank
+    const allAgents = await ctx.db
+      .query("agents")
+      .withIndex("by_shells")
+      .order("desc")
+      .collect();
+    const rank = allAgents.findIndex((a) => a._id === agentId) + 1;
+
+    return {
+      name: agent.name,
+      shells: agent.shells,
+      rank,
+      totalAgents: allAgents.length,
+
+      // All-time stats
+      handsPlayed: agent.handsPlayed,
+      handsWon: agent.handsWon,
+      winRate: agent.handsPlayed > 0
+        ? ((agent.handsWon / agent.handsPlayed) * 100).toFixed(1)
+        : "0.0",
+      totalWinnings: agent.totalWinnings,
+      totalLosses: agent.totalLosses,
+      netProfit: agent.totalWinnings - agent.totalLosses,
+
+      // Recent performance
+      recentHandsCount: recentHands.length,
+      recentWins,
+      recentWinRate: recentWinRate.toFixed(1),
+
+      // Recent hands detail
+      recentHands: recentHands.map((hand) => ({
+        handNumber: hand.handNumber,
+        pot: hand.pot,
+        won: hand.winners?.some((w) => w.agentId === agentId) || false,
+        winAmount: hand.winners?.find((w) => w.agentId === agentId)?.amount || 0,
+        completedAt: hand.completedAt,
+      })),
+
+      createdAt: agent.createdAt,
+    };
+  },
+});
+
+/**
  * Get agent by API key (for client-side auth)
  */
 export const getByApiKey = query({

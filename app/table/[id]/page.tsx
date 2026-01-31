@@ -12,12 +12,14 @@ import LoginDialog from "../../components/LoginDialog";
 import ActionLog from "../../components/ActionLog";
 import HandHistory from "../../components/HandHistory";
 import TableControls from "../../components/TableControls";
+import PlayerStatsCard from "../../components/PlayerStatsCard";
 
 export default function TablePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const tableId = id as Id<"tables">;
   const { isAuthenticated, agentId, agentData, isLoading: authLoading } = useAuth();
   const [showLoginDialog, setShowLoginDialog] = useState(false);
+  const [hoveredPlayer, setHoveredPlayer] = useState<Id<"agents"> | null>(null);
 
   // Use getMyHand if authenticated, otherwise use getState (observer mode)
   const myHand = useQuery(
@@ -88,10 +90,18 @@ export default function TablePage({ params }: { params: Promise<{ id: string }> 
           </div>
           <div className="flex items-center gap-4">
             {isAuthenticated && agentData ? (
-              <div className="text-right">
-                <div className="text-sm text-gray-400">Logged in as</div>
-                <div className="font-semibold">{agentData.name}</div>
-                <div className="text-sm text-yellow-400">{agentData.shells} 🐚</div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <div className="text-sm text-gray-400">Logged in as</div>
+                  <div className="font-semibold">{agentData.name}</div>
+                  <div className="text-sm text-yellow-400">{agentData.shells} 🐚</div>
+                </div>
+                <Link
+                  href="/dashboard"
+                  className="px-3 py-2 bg-blue-700 hover:bg-blue-600 rounded transition text-sm"
+                >
+                  Dashboard
+                </Link>
               </div>
             ) : (
               <button
@@ -210,13 +220,15 @@ export default function TablePage({ params }: { params: Promise<{ id: string }> 
                   style={{ left: `${x}%`, top: `${y}%` }}
                 >
                   <div
-                    className={`player-seat bg-gray-900 border-2 rounded-lg p-3 min-w-[160px] ${
+                    className={`player-seat bg-gray-900 border-2 rounded-lg p-3 min-w-[160px] cursor-pointer relative ${
                       isActive
                         ? "border-green-500 animate-glow"
                         : handPlayer?.folded
                         ? "border-gray-800 opacity-60"
                         : "border-gray-700"
                     }`}
+                    onMouseEnter={() => setHoveredPlayer(seat.agentId)}
+                    onMouseLeave={() => setHoveredPlayer(null)}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="font-semibold text-sm truncate">{seat.name}</div>
@@ -252,6 +264,13 @@ export default function TablePage({ params }: { params: Promise<{ id: string }> 
                           </div>
                         )}
                       </>
+                    )}
+
+                    {/* Hover Stats Card */}
+                    {hoveredPlayer === seat.agentId && (
+                      <div className="absolute left-full ml-2 top-0 z-50">
+                        <PlayerStatsCard agentId={seat.agentId} compact />
+                      </div>
                     )}
                   </div>
                 </div>

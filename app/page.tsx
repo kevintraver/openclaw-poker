@@ -46,6 +46,12 @@ export default function Home() {
                 <div className="font-semibold">{agentData.name}</div>
                 <div className="text-sm text-yellow-400">{agentData.shells} 🐚</div>
               </div>
+              <Link
+                href="/dashboard"
+                className="px-4 py-2 bg-blue-700 hover:bg-blue-600 rounded-lg transition text-sm"
+              >
+                Dashboard
+              </Link>
               <button
                 onClick={logout}
                 className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition text-sm"
