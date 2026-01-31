@@ -156,7 +156,7 @@ export default function TablePage({ params }: { params: Promise<{ id: string }> 
                   <TableControls
                     tableId={tableId}
                     agentId={agentData._id}
-                    currentStack={myHand.yourStack}
+                    currentStack={(myHand as any).yourStack}
                     maxBuyIn={tableState?.blinds ? tableState.blinds.big * 100 : 1000}
                     agentShells={agentData.shells}
                     isSittingOut={false}
@@ -285,8 +285,8 @@ export default function TablePage({ params }: { params: Promise<{ id: string }> 
               <div className="p-4 bg-gray-900 rounded-lg border border-gray-800">
                 <div className="text-sm text-gray-400 mb-3 font-semibold">Your Cards</div>
                 <div className="flex gap-3 justify-center">
-                  {myHand.yourCards && myHand.yourCards.length > 0 ? (
-                    myHand.yourCards.map((card: string, i: number) => (
+                  {(myHand as any).yourCards && (myHand as any).yourCards.length > 0 ? (
+                    (myHand as any).yourCards.map((card: string, i: number) => (
                       <Card key={i} card={card} size="large" animate={true} />
                     ))
                   ) : (
@@ -298,21 +298,21 @@ export default function TablePage({ params }: { params: Promise<{ id: string }> 
                     <span className="text-gray-400">Stack:</span>
                     <span className="text-yellow-400 font-semibold flex items-center gap-1">
                       <span className="chip-icon scale-75"></span>
-                      {myHand.yourStack}
+                      {(myHand as any).yourStack}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-400">Current Bet:</span>
-                    <span className="text-white font-semibold">{myHand.yourCurrentBet} 🐚</span>
+                    <span className="text-white font-semibold">{(myHand as any).yourCurrentBet} 🐚</span>
                   </div>
                 </div>
               </div>
 
               {/* Actions */}
-              {myHand.validActions && myHand.validActions.length > 0 && (
+              {(myHand as any).validActions && (myHand as any).validActions.length > 0 && (
                 <ActionButtons
-                  validActions={myHand.validActions as any}
-                  yourTurn={myHand.yourTurn}
+                  validActions={(myHand as any).validActions as any}
+                  yourTurn={(myHand as any).yourTurn}
                   onAction={handleAction}
                 />
               )}
