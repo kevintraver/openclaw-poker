@@ -184,7 +184,18 @@ export const join = mutation({
       sittingOut: false,
     };
 
-    await ctx.db.patch(tableId, { seats: newSeats });
+    // Count active players after this join
+    const activePlayers = newSeats.filter(
+      (s) => s !== null && !s.sittingOut && s.stack > 0
+    );
+
+    // Update table status to between_hands if we have enough players
+    const newStatus = activePlayers.length >= 2 ? "between_hands" : "waiting";
+
+    await ctx.db.patch(tableId, {
+      seats: newSeats,
+      status: newStatus,
+    });
 
     return { seatIndex: targetSeat, stack: buyIn };
   },
