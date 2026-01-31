@@ -13,16 +13,35 @@ export const list = query({
   handler: async (ctx) => {
     const tables = await ctx.db.query("tables").collect();
 
-    return tables.map((table) => ({
-      id: table._id,
-      name: table.name,
-      status: table.status,
-      players: table.seats.filter((s) => s !== null).length,
-      maxSeats: table.maxSeats,
-      blinds: `${table.smallBlind}/${table.bigBlind}`,
-      minBuyIn: table.minBuyIn,
-      maxBuyIn: table.maxBuyIn,
-    }));
+    return await Promise.all(
+      tables.map(async (table) => {
+        // Get agent names for seats
+        const seats = await Promise.all(
+          table.seats.map(async (seat) => {
+            if (!seat) return null;
+            const agent = await ctx.db.get(seat.agentId);
+            return {
+              agentId: seat.agentId,
+              name: agent?.name ?? "Unknown",
+              stack: seat.stack,
+              sittingOut: seat.sittingOut,
+            };
+          })
+        );
+
+        return {
+          id: table._id,
+          name: table.name,
+          status: table.status,
+          players: table.seats.filter((s) => s !== null).length,
+          maxSeats: table.maxSeats,
+          blinds: `${table.smallBlind}/${table.bigBlind}`,
+          minBuyIn: table.minBuyIn,
+          maxBuyIn: table.maxBuyIn,
+          seats,
+        };
+      })
+    );
   },
 });
 
@@ -216,6 +235,79 @@ export const leave = mutation({
 });
 
 /**
+ * Rebuy chips at a table (add to stack)
+ */
+export const rebuy = mutation({
+  args: {
+    tableId: v.id("tables"),
+    agentId: v.id("agents"),
+    amount: v.number(),
+  },
+  handler: async (ctx, { tableId, agentId, amount }) => {
+    const table = await ctx.db.get(tableId);
+    if (!table) throw new Error("Table not found");
+
+    // Cannot rebuy during active hand
+    if (table.status === "playing" && table.currentHandId) {
+      const hand = await ctx.db.get(table.currentHandId);
+      if (hand && hand.status !== "complete") {
+        throw new Error("Cannot rebuy during active hand");
+      }
+    }
+
+    const seatIndex = table.seats.findIndex((s) => s?.agentId === agentId);
+    if (seatIndex === -1) throw new Error("Not at table");
+
+    const agent = await ctx.db.get(agentId);
+    if (!agent || agent.shells < amount) {
+      throw new Error("Insufficient shells");
+    }
+
+    const seat = table.seats[seatIndex]!;
+    const newStack = seat.stack + amount;
+
+    if (newStack > table.maxBuyIn) {
+      throw new Error(`Total stack cannot exceed ${table.maxBuyIn}`);
+    }
+
+    // Deduct from agent shells
+    await ctx.db.patch(agentId, { shells: agent.shells - amount });
+
+    // Add to stack
+    const newSeats = [...table.seats];
+    newSeats[seatIndex] = { ...seat, stack: newStack };
+    await ctx.db.patch(tableId, { seats: newSeats });
+
+    return { newStack };
+  },
+});
+
+/**
+ * Toggle sit out status
+ */
+export const toggleSitOut = mutation({
+  args: {
+    tableId: v.id("tables"),
+    agentId: v.id("agents"),
+  },
+  handler: async (ctx, { tableId, agentId }) => {
+    const table = await ctx.db.get(tableId);
+    if (!table) throw new Error("Table not found");
+
+    const seatIndex = table.seats.findIndex((s) => s?.agentId === agentId);
+    if (seatIndex === -1) throw new Error("Not at table");
+
+    const seat = table.seats[seatIndex]!;
+    const newSeats = [...table.seats];
+    newSeats[seatIndex] = { ...seat, sittingOut: !seat.sittingOut };
+
+    await ctx.db.patch(tableId, { seats: newSeats });
+
+    return { sittingOut: !seat.sittingOut };
+  },
+});
+
+/**
  * Take an action in the current hand
  */
 export const action = mutation({
@@ -316,6 +408,32 @@ export const getHandActions = query({
     );
 
     return actionsWithNames.sort((a, b) => a.timestamp - b.timestamp);
+  },
+});
+
+/**
+ * Get table hand history (recent completed hands)
+ */
+export const getTableHandHistory = query({
+  args: {
+    tableId: v.id("tables"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { tableId, limit = 10 }) => {
+    const hands = await ctx.db
+      .query("hands")
+      .withIndex("by_tableId", (q) => q.eq("tableId", tableId))
+      .filter((q) => q.eq(q.field("status"), "complete"))
+      .order("desc")
+      .take(limit);
+
+    return hands.map((hand) => ({
+      handNumber: hand.handNumber,
+      pot: hand.pot,
+      winners: hand.winners,
+      completedAt: hand.completedAt,
+      communityCards: hand.communityCards,
+    }));
   },
 });
 

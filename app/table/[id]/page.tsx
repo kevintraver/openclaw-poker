@@ -10,6 +10,8 @@ import Card from "../../components/Card";
 import ActionButtons from "../../components/ActionButtons";
 import LoginDialog from "../../components/LoginDialog";
 import ActionLog from "../../components/ActionLog";
+import HandHistory from "../../components/HandHistory";
+import TableControls from "../../components/TableControls";
 
 export default function TablePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -111,31 +113,52 @@ export default function TablePage({ params }: { params: Promise<{ id: string }> 
 
       {/* Three-Column Layout */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Sidebar - Player Stats (Future) */}
+        {/* Left Sidebar - Player Stats & Controls */}
         <div className="lg:col-span-3 space-y-4">
           {isAuthenticated && agentData && (
-            <div className="p-4 bg-gray-900 rounded-lg border border-gray-800">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Your Stats</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Hands Played:</span>
-                  <span className="text-white font-semibold">{agentData.handsPlayed}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Hands Won:</span>
-                  <span className="text-green-400 font-semibold">{agentData.handsWon}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Win Rate:</span>
-                  <span className="text-blue-400 font-semibold">
-                    {agentData.handsPlayed > 0
-                      ? ((agentData.handsWon / agentData.handsPlayed) * 100).toFixed(1) + '%'
-                      : 'N/A'}
-                  </span>
+            <>
+              <div className="p-4 bg-gray-900 rounded-lg border border-gray-800">
+                <h3 className="text-sm font-semibold text-gray-400 mb-3">Your Stats</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Hands Played:</span>
+                    <span className="text-white font-semibold">{agentData.handsPlayed}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Hands Won:</span>
+                    <span className="text-green-400 font-semibold">{agentData.handsWon}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Win Rate:</span>
+                    <span className="text-blue-400 font-semibold">
+                      {agentData.handsPlayed > 0
+                        ? ((agentData.handsWon / agentData.handsPlayed) * 100).toFixed(1) + '%'
+                        : 'N/A'}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
+
+              {/* Table Controls (if seated at table) */}
+              {myHand && (
+                <div className="p-4 bg-gray-900 rounded-lg border border-gray-800">
+                  <h3 className="text-sm font-semibold text-gray-400 mb-3">Table Controls</h3>
+                  <TableControls
+                    tableId={tableId}
+                    agentId={agentData._id}
+                    currentStack={myHand.yourStack}
+                    maxBuyIn={tableState?.blinds ? tableState.blinds.big * 100 : 1000}
+                    agentShells={agentData.shells}
+                    isSittingOut={false}
+                    tableStatus={tableState?.status || "waiting"}
+                  />
+                </div>
+              )}
+            </>
           )}
+
+          {/* Hand History */}
+          <HandHistory tableId={tableId} />
         </div>
 
         {/* Center - Poker Table */}

@@ -6,16 +6,31 @@ import Link from "next/link";
 import { useState } from "react";
 import { useAuth } from "./contexts/AuthContext";
 import LoginDialog from "./components/LoginDialog";
+import JoinTableDialog from "./components/JoinTableDialog";
 
 export default function Home() {
   const tables = useQuery(api.tables.list);
   const leaderboard = useQuery(api.agents.leaderboard, { limit: 10 });
   const { isAuthenticated, agentData, logout } = useAuth();
   const [showLoginDialog, setShowLoginDialog] = useState(false);
+  const [joinTableData, setJoinTableData] = useState<any>(null);
 
   return (
     <main className="min-h-screen p-8">
       <LoginDialog isOpen={showLoginDialog} onClose={() => setShowLoginDialog(false)} />
+      {joinTableData && (
+        <JoinTableDialog
+          isOpen={true}
+          onClose={() => setJoinTableData(null)}
+          tableId={joinTableData.id}
+          tableName={joinTableData.name}
+          minBuyIn={joinTableData.minBuyIn}
+          maxBuyIn={joinTableData.maxBuyIn}
+          seats={joinTableData.seats || []}
+          agentId={agentData?._id || null}
+          agentShells={agentData?.shells || 0}
+        />
+      )}
 
       {/* Header */}
       <div className="max-w-6xl mx-auto mb-12">
@@ -80,12 +95,11 @@ export default function Home() {
               <div className="text-gray-500">No tables yet</div>
             ) : (
               tables.map((table) => (
-                <Link
+                <div
                   key={table.id}
-                  href={`/table/${table.id}`}
-                  className="block p-4 bg-gray-900 rounded-lg hover:bg-gray-800 transition border border-gray-800"
+                  className="p-4 bg-gray-900 rounded-lg border border-gray-800"
                 >
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center mb-3">
                     <div>
                       <div className="font-semibold">{table.name}</div>
                       <div className="text-sm text-gray-400">
@@ -113,7 +127,23 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
-                </Link>
+                  <div className="flex gap-2">
+                    <Link
+                      href={`/table/${table.id}`}
+                      className="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-center transition"
+                    >
+                      Watch
+                    </Link>
+                    {isAuthenticated && table.players < table.maxSeats && (
+                      <button
+                        onClick={() => setJoinTableData(table)}
+                        className="flex-1 px-4 py-2 bg-orange-600 hover:bg-orange-500 rounded transition"
+                      >
+                        Join
+                      </button>
+                    )}
+                  </div>
+                </div>
               ))
             )}
           </div>
