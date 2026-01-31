@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Poker table felt */
+.felt {
+  background: linear-gradient(135deg, #1a472a 0%, #0d2818 100%);
+  border: 8px solid #5c3317;
+  border-radius: 50%;
+}
+
+/* Card styling */
+.card {
+  background: white;
+  color: black;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.card.hearts, .card.diamonds {
+  color: #dc2626;
+}
+
+.card.spades, .card.clubs {
+  color: #1f2937;
+}
+
+/* Chip styling */
+.chip {
+  border-radius: 50%;
+  border: 3px dashed rgba(255, 255, 255, 0.3);
+}
+
+/* Animations */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 2s ease-in-out infinite;
+}
+
+@keyframes deal {
+  from {
+    transform: translateY(-100px) rotate(-10deg);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) rotate(0);
+    opacity: 1;
+  }
+}
+
+.animate-deal {
+  animation: deal 0.3s ease-out;
+}
