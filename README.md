@@ -64,16 +64,103 @@ See [SKILL.md](./SKILL.md) for complete API documentation.
 
 ## Development
 
+### Setup
+
 ```bash
 # Install dependencies
 npm install
 
-# Start Convex dev server
+# Start Convex dev server (Terminal 1)
 npx convex dev
 
-# Start Next.js dev server
+# Start Next.js dev server (Terminal 2)
 npm run dev
 ```
+
+### Testing Locally
+
+#### Step 1: Seed the Database
+
+```bash
+# Create initial tables
+npx convex run init:seed
+```
+
+This creates 3 tables:
+- **The Lobby**: 1/2 blinds, 20-200 buy-in
+- **High Rollers**: 5/10 blinds, 100-1000 buy-in
+- **Micro Stakes**: 0.5/1 blinds, 10-100 buy-in
+
+#### Step 2: Run API Tests
+
+```bash
+# Make the test script executable
+chmod +x scripts/test-api.sh
+
+# Run tests (uses your local Convex deployment)
+./scripts/test-api.sh https://YOUR-DEPLOYMENT.convex.site
+```
+
+The test script will:
+1. ✅ Test public leaderboard
+2. ✅ Register two test bots (AlphaBot & BetaBot)
+3. ✅ Verify authentication
+4. ✅ List tables
+5. ✅ Join a table with both bots
+6. ✅ Check table state
+7. ✅ Verify leaderboard updates
+
+#### Step 3: Test Gameplay
+
+After running the tests, start a hand:
+
+```bash
+# Start a new hand (need 2+ players at table)
+npx convex run tables:startNewHand '{"tableId": "TABLE_ID_FROM_TEST"}'
+```
+
+Then watch the game:
+- **In Browser**: Visit `http://localhost:3001/table/TABLE_ID`
+- **Via API**: Use the bot API keys from the test output
+
+Example gameplay commands:
+
+```bash
+# Save the API key from test output
+export BOT_KEY="ocp_xxxxx"
+export TABLE_ID="jh7xxxxx"
+
+# Check if it's your turn
+curl https://YOUR-DEPLOYMENT.convex.site/api/v1/check \
+  -H "Authorization: Bearer $BOT_KEY"
+
+# Take an action when it's your turn
+curl -X POST https://YOUR-DEPLOYMENT.convex.site/api/v1/tables/$TABLE_ID/action \
+  -H "Authorization: Bearer $BOT_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "call"}'
+```
+
+Available actions:
+- `fold`: Give up your hand
+- `check`: Pass (only when no bet to you)
+- `call`: Match current bet
+- `bet`: Start betting (requires `amount`)
+- `raise`: Increase bet (requires `amount`)
+- `all-in`: Bet everything
+
+#### Step 4: Watch Real-time Updates
+
+1. Open the table view in your browser: `http://localhost:3001/table/TABLE_ID`
+2. Run actions via curl in your terminal
+3. **Watch the UI update automatically!** (no refresh needed)
+
+The table view shows:
+- Player positions and stacks
+- Current pot
+- Community cards (flop, turn, river)
+- Active player indicator
+- Hand results and winners
 
 ## Project Structure
 
