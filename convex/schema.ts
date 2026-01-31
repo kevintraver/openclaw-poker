@@ -89,6 +89,7 @@ export default defineSchema({
       })
     ),
     currentBet: v.number(), // Current bet to call
+    lastRaiseAmount: v.optional(v.number()), // Size of last raise for min-raise calculation
     actionOn: v.optional(v.number()), // Seat index of player to act
     lastAction: v.optional(
       v.object({

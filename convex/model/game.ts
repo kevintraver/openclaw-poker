@@ -68,6 +68,7 @@ export async function startHand(
     pot: 0,
     sidePots: [],
     currentBet: 0,
+    lastRaiseAmount: undefined,
     actionOn: undefined,
     lastAction: undefined,
     actionDeadline: undefined,
@@ -102,11 +103,28 @@ async function postBlinds(
   if (!hand) throw new Error("Hand not found");
 
   const activeSeats = players.map((p) => p.seatIndex);
-  
-  // Small blind is left of dealer
-  const sbSeatIndex = findNextActiveSeat(table, table.dealerSeat, activeSeats);
-  // Big blind is left of small blind
-  const bbSeatIndex = findNextActiveSeat(table, sbSeatIndex, activeSeats);
+  const isHeadsUp = players.length === 2;
+
+  let sbSeatIndex: number;
+  let bbSeatIndex: number;
+  let firstToActSeat: number;
+
+  if (isHeadsUp) {
+    // Heads-up: dealer (button) is small blind
+    sbSeatIndex = table.dealerSeat;
+    // Other player is big blind
+    bbSeatIndex = findNextActiveSeat(table, sbSeatIndex, activeSeats);
+    // Small blind acts first preflop in heads-up
+    firstToActSeat = sbSeatIndex;
+  } else {
+    // 3+ players: standard blind posting
+    // Small blind is left of dealer
+    sbSeatIndex = findNextActiveSeat(table, table.dealerSeat, activeSeats);
+    // Big blind is left of small blind
+    bbSeatIndex = findNextActiveSeat(table, sbSeatIndex, activeSeats);
+    // Action starts left of big blind
+    firstToActSeat = findNextActiveSeat(table, bbSeatIndex, activeSeats);
+  }
 
   const updatedPlayers = [...hand.players];
   let pot = 0;
@@ -139,14 +157,13 @@ async function postBlinds(
     pot += bbAmount;
   }
 
-  // Action starts left of big blind
-  const firstToActSeat = findNextActiveSeat(table, bbSeatIndex, activeSeats);
   const firstToActIndex = updatedPlayers.findIndex((p) => p.seatIndex === firstToActSeat);
 
   await ctx.db.patch(handId, {
     players: updatedPlayers,
     pot,
     currentBet: table.bigBlind,
+    lastRaiseAmount: table.bigBlind, // Initial raise from 0 to BB
     actionOn: firstToActIndex,
     actionDeadline: Date.now() + ACTION_TIMEOUT_MS,
   });
@@ -189,6 +206,7 @@ export async function processAction(
   const updatedPlayers = [...hand.players];
   let newPot = hand.pot;
   let newCurrentBet = hand.currentBet;
+  let newLastRaiseAmount = hand.lastRaiseAmount;
 
   // Validate and process action
   switch (action) {
@@ -220,10 +238,15 @@ export async function processAction(
       if (amount === undefined || amount <= 0) {
         throw new Error("Bet/raise amount required");
       }
-      const minRaise = hand.currentBet + table.bigBlind;
-      if (amount < minRaise && amount < player.stack) {
+
+      // Minimum raise is currentBet + lastRaiseAmount
+      const lastRaise = hand.lastRaiseAmount ?? table.bigBlind;
+      const minRaise = hand.currentBet + lastRaise;
+
+      if (amount < minRaise && amount < player.stack + player.currentBet) {
         throw new Error(`Minimum raise is ${minRaise}`);
       }
+
       const totalBetAmount = Math.min(amount, player.stack + player.currentBet);
       const additionalAmount = totalBetAmount - player.currentBet;
       updatedPlayers[playerIndex] = {
@@ -234,7 +257,11 @@ export async function processAction(
         allIn: player.stack - additionalAmount === 0,
       };
       newPot += additionalAmount;
+
+      // Update raise tracking
+      const raiseAmount = totalBetAmount - hand.currentBet;
       newCurrentBet = totalBetAmount;
+      newLastRaiseAmount = raiseAmount;
       break;
     }
 
@@ -250,7 +277,9 @@ export async function processAction(
       };
       newPot += allInAmount;
       if (newBet > newCurrentBet) {
+        const raiseAmount = newBet - newCurrentBet;
         newCurrentBet = newBet;
+        newLastRaiseAmount = raiseAmount;
       }
       break;
     }
@@ -289,6 +318,7 @@ export async function processAction(
       players: updatedPlayers,
       pot: newPot,
       currentBet: newCurrentBet,
+      lastRaiseAmount: newLastRaiseAmount,
       actionOn: nextPlayerIndex,
       actionDeadline: Date.now() + ACTION_TIMEOUT_MS,
       lastAction: {
@@ -415,9 +445,54 @@ async function advanceStreet(
     players: resetPlayers,
     pot,
     currentBet: 0,
+    lastRaiseAmount: undefined, // Reset for new street
     actionOn: firstPlayerIndex,
     actionDeadline: Date.now() + ACTION_TIMEOUT_MS,
   });
+}
+
+/**
+ * Calculate side pots using threshold-based algorithm
+ * Returns array of side pots with eligible players for each
+ */
+function calculateSidePots(players: Hand["players"]): {
+  amount: number;
+  eligiblePlayers: Id<"agents">[];
+}[] {
+  const activePlayers = players.filter((p) => !p.folded);
+  if (activePlayers.length === 0) return [];
+
+  // Sort players by total bet amount (lowest to highest)
+  const sortedByBet = [...activePlayers].sort((a, b) => a.totalBet - b.totalBet);
+
+  const sidePots: { amount: number; eligiblePlayers: Id<"agents">[] }[] = [];
+  let previousThreshold = 0;
+
+  for (let i = 0; i < sortedByBet.length; i++) {
+    const threshold = sortedByBet[i].totalBet;
+
+    // Skip if this player bet the same as previous (already included in that pot)
+    if (threshold === previousThreshold) continue;
+
+    // Players who bet at least this threshold can compete for this pot
+    const eligiblePlayers = activePlayers
+      .filter((p) => p.totalBet >= threshold)
+      .map((p) => p.agentId);
+
+    // Calculate pot amount: (threshold - previousThreshold) * number of eligible players
+    const potAmount = (threshold - previousThreshold) * eligiblePlayers.length;
+
+    if (potAmount > 0) {
+      sidePots.push({
+        amount: potAmount,
+        eligiblePlayers,
+      });
+    }
+
+    previousThreshold = threshold;
+  }
+
+  return sidePots;
 }
 
 async function showdown(
@@ -440,26 +515,56 @@ async function showdown(
   // Sort by hand strength (best first)
   evaluated.sort((a, b) => compareHands(b.handRank, a.handRank));
 
-  // Find winners (could be ties)
-  const winners: { agentId: Id<"agents">; amount: number; hand: string }[] = [];
-  const bestHand = evaluated[0].handRank;
-  
-  const tiedWinners = evaluated.filter(
-    (e) => compareHands(e.handRank, bestHand) === 0
-  );
+  // Calculate side pots
+  const sidePots = calculateSidePots(players);
 
-  const winAmount = Math.floor(pot / tiedWinners.length);
-  for (const { player, handRank } of tiedWinners) {
+  // Award each side pot to the best hand among eligible players
+  const totalWinnings = new Map<Id<"agents">, number>();
+  const winningHands = new Map<Id<"agents">, string>();
+
+  for (const sidePot of sidePots) {
+    // Find eligible winners for this pot
+    const eligibleEvaluated = evaluated.filter((e) =>
+      sidePot.eligiblePlayers.includes(e.player.agentId)
+    );
+
+    if (eligibleEvaluated.length === 0) continue;
+
+    // Find best hand among eligible players
+    const bestHand = eligibleEvaluated[0].handRank;
+    const tiedWinners = eligibleEvaluated.filter(
+      (e) => compareHands(e.handRank, bestHand) === 0
+    );
+
+    // Split pot among tied winners
+    const winAmount = Math.floor(sidePot.amount / tiedWinners.length);
+    for (const { player, handRank } of tiedWinners) {
+      const currentWinnings = totalWinnings.get(player.agentId) || 0;
+      totalWinnings.set(player.agentId, currentWinnings + winAmount);
+
+      if (!winningHands.has(player.agentId)) {
+        winningHands.set(
+          player.agentId,
+          `${handRank.name} (${formatHand(player.holeCards)})`
+        );
+      }
+    }
+  }
+
+  // Convert to winners array
+  const winners: { agentId: Id<"agents">; amount: number; hand: string }[] = [];
+  for (const [agentId, amount] of totalWinnings.entries()) {
     winners.push({
-      agentId: player.agentId,
-      amount: winAmount,
-      hand: `${handRank.name} (${formatHand(player.holeCards)})`,
+      agentId,
+      amount,
+      hand: winningHands.get(agentId) || "Unknown",
     });
   }
 
   await ctx.db.patch(handId, {
     status: "complete",
     communityCards,
+    sidePots,
     winners,
     completedAt: Date.now(),
     actionOn: undefined,
@@ -478,10 +583,28 @@ async function awardPot(
   pot: number
 ): Promise<void> {
   const winner = players.find((p) => !p.folded)!;
-  const winners = [{ agentId: winner.agentId, amount: pot, hand: "Others folded" }];
+
+  // Calculate side pots in case winner was all-in
+  const sidePots = calculateSidePots(players);
+
+  // Winner takes all pots they're eligible for
+  let totalWinnings = 0;
+  for (const sidePot of sidePots) {
+    if (sidePot.eligiblePlayers.includes(winner.agentId)) {
+      totalWinnings += sidePot.amount;
+    }
+  }
+
+  // If no side pots calculated, give entire pot
+  if (totalWinnings === 0) {
+    totalWinnings = pot;
+  }
+
+  const winners = [{ agentId: winner.agentId, amount: totalWinnings, hand: "Others folded" }];
 
   await ctx.db.patch(handId, {
     status: "complete",
+    sidePots,
     winners,
     completedAt: Date.now(),
     actionOn: undefined,
@@ -570,7 +693,7 @@ export function getPlayerView(
           ? p.holeCards
           : undefined,
     })),
-    validActions: getValidActions(hand, playerIndex),
+    validActions: getValidActions(hand, playerIndex, table.bigBlind),
     lastAction: hand.lastAction,
     winners: hand.winners,
   };
@@ -578,7 +701,8 @@ export function getPlayerView(
 
 function getValidActions(
   hand: Hand,
-  playerIndex: number
+  playerIndex: number,
+  bigBlind?: number
 ): { action: string; minAmount?: number; maxAmount?: number }[] {
   if (hand.actionOn !== playerIndex) return [];
 
@@ -603,10 +727,14 @@ function getValidActions(
 
   // Can bet/raise if have chips
   if (player.stack > 0) {
-    const minRaise = hand.currentBet + 1; // Simplified
+    const lastRaise = hand.lastRaiseAmount ?? bigBlind ?? 1;
+    const minRaise = hand.currentBet + lastRaise;
+
     if (hand.currentBet === 0) {
+      // First bet on this street
       actions.push({ action: "bet", minAmount: 1, maxAmount: player.stack });
-    } else if (player.stack > hand.currentBet - player.currentBet) {
+    } else if (player.stack + player.currentBet > hand.currentBet) {
+      // Can raise
       actions.push({
         action: "raise",
         minAmount: minRaise,
