@@ -333,7 +333,7 @@ export async function processAction(
     }
   }
 
-  // Log the action with reason
+  // Log the action with reason, street, and pot
   await ctx.db.insert("actions", {
     handId,
     agentId,
@@ -341,6 +341,8 @@ export async function processAction(
     amount,
     timestamp: Date.now(),
     reason: reason ?? "player",
+    street: hand.status as "preflop" | "flop" | "turn" | "river",
+    potAfter: newPot,
   });
 
   // Find next player to act

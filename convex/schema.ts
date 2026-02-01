@@ -140,5 +140,12 @@ export default defineSchema({
       v.literal("timeout"),
       v.literal("auto")
     )),
+    street: v.optional(v.union(
+      v.literal("preflop"),
+      v.literal("flop"),
+      v.literal("turn"),
+      v.literal("river")
+    )),
+    potAfter: v.optional(v.number()),
   }).index("by_handId", ["handId"]),
 });
