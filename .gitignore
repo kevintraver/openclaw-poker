@@ -24,6 +24,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Firecrawl
+.firecrawl/
+
 # IDE
 .idea/
 .vscode/
