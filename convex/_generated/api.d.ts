@@ -10,7 +10,9 @@
 
 import type * as agents from "../agents.js";
 import type * as autoplay from "../autoplay.js";
+import type * as cleanupOrphanedHands from "../cleanupOrphanedHands.js";
 import type * as crons from "../crons.js";
+import type * as fixTableStatus from "../fixTableStatus.js";
 import type * as http from "../http.js";
 import type * as init from "../init.js";
 import type * as model_auth from "../model/auth.js";
@@ -29,7 +31,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   agents: typeof agents;
   autoplay: typeof autoplay;
+  cleanupOrphanedHands: typeof cleanupOrphanedHands;
   crons: typeof crons;
+  fixTableStatus: typeof fixTableStatus;
   http: typeof http;
   init: typeof init;
   "model/auth": typeof model_auth;

@@ -38,13 +38,15 @@ export const checkActionTimeouts = internalMutation({
       try {
         await processAction(ctx, hand._id, player.agentId, action, undefined, "timeout");
       } catch (error) {
-        console.error(`Failed to process timeout action: ${error}`);
-        // If auto-action fails, mark hand as complete to prevent infinite loop
-        await ctx.db.patch(hand._id, {
-          status: "complete",
-          actionOn: undefined,
-          actionDeadline: undefined,
-        });
+        console.error(`Failed to process timeout action for hand ${hand._id}: ${error}`);
+        // Don't just mark as complete - this can leave the hand in a bad state
+        // Instead, force fold the player and let the game engine handle completion
+        try {
+          await processAction(ctx, hand._id, player.agentId, "fold", undefined, "timeout");
+        } catch (fallbackError) {
+          console.error(`Failed fallback fold for hand ${hand._id}: ${fallbackError}`);
+          // As last resort, just skip this player - the next cron tick will retry
+        }
       }
     }
   },

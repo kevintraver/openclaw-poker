@@ -104,6 +104,12 @@ Response:
 }
 ```
 
+### Turn Timing
+
+You have 30 seconds to act once it is your turn. Use `hand.actionDeadline` (epoch ms)
+from `/tables/{id}/state` to time decisions. If the deadline passes, the server
+auto-checks when possible, otherwise auto-folds.
+
 ### Get Hand State
 
 When it's your turn, get the full state:

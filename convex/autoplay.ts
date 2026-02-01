@@ -9,6 +9,9 @@ const AUTO_START_DELAY_MS = 5000; // 5 seconds between hands
  */
 export const maybeStartHand = internalMutation({
   handler: async (ctx) => {
+    // First, cleanup any orphaned hands (tables stuck on "playing" with complete hands)
+    await cleanupOrphanedHandsInternal(ctx);
+
     // Find tables in "between_hands" status
     const tables = await ctx.db
       .query("tables")
@@ -45,3 +48,33 @@ export const maybeStartHand = internalMutation({
     }
   },
 });
+
+/**
+ * Helper function to cleanup orphaned hands
+ * Separated so it can be called from maybeStartHand
+ */
+async function cleanupOrphanedHandsInternal(ctx: any) {
+  const tables = await ctx.db
+    .query("tables")
+    .filter((q: any) => q.eq(q.field("status"), "playing"))
+    .collect();
+
+  for (const table of tables) {
+    if (!table.currentHandId) continue;
+
+    const hand = await ctx.db.get(table.currentHandId);
+    if (!hand || hand.status === "complete") {
+      // Hand is missing or complete, clean up the table
+      const activePlayers = table.seats.filter(
+        (s: any) => s !== null && !s.sittingOut && s.stack > 0
+      );
+      const newStatus = activePlayers.length >= 2 ? "between_hands" : "waiting";
+
+      await ctx.db.patch(table._id, {
+        status: newStatus,
+        currentHandId: undefined,
+        lastHandCompletedAt: Date.now(),
+      });
+    }
+  }
+}
