@@ -174,19 +174,21 @@ export default function TablePage({ params }: { params: Promise<{ id: string }> 
         {/* Center - Poker Table */}
         <div className="lg:col-span-6">
           <div className="felt p-8 aspect-[16/10] relative">
-            {/* Pot */}
+            {/* Pot and Community Cards - Modernized Layout */}
             {currentHand && (
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center z-10">
+              <div className="absolute top-[42%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-5 z-10">
+                {/* Pot Display */}
                 <div className="pot-display">
-                  <div className="text-xs text-blue-300 mb-1 font-semibold uppercase tracking-wide">Pot</div>
-                  <div className="text-4xl font-bold text-yellow-400 flex items-center gap-2">
+                  <div className="text-[10px] text-blue-300 mb-1.5 font-bold uppercase tracking-widest">Pot</div>
+                  <div className="text-3xl font-bold text-yellow-400 flex items-center gap-2">
                     <span className="chip-icon"></span>
                     {currentHand.pot}
                   </div>
                 </div>
+
                 {/* Community Cards */}
                 {currentHand.communityCards && currentHand.communityCards.length > 0 && (
-                  <div className="flex gap-3 mt-6 justify-center">
+                  <div className="flex gap-2.5 justify-center">
                     {currentHand.communityCards.map((card, i) => (
                       <Card key={i} card={card} size="medium" animate={true} />
                     ))}
@@ -209,7 +211,7 @@ export default function TablePage({ params }: { params: Promise<{ id: string }> 
 
               // Position seats around the table
               const angle = (index / seats.length) * 2 * Math.PI - Math.PI / 2;
-              const radius = 35; // percentage
+              const radius = 42; // percentage - increased to prevent overlap with center pot
               const x = 50 + radius * Math.cos(angle);
               const y = 50 + radius * Math.sin(angle);
 
