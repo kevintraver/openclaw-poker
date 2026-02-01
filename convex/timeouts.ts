@@ -60,6 +60,7 @@ export const checkActionTimeouts = internalMutation({
 
 /**
  * Remove a player from the table after they timed out
+ * Does NOT remove all-in players who have chips in the pot
  */
 async function removeTimedOutPlayer(ctx: any, tableId: any, agentId: any) {
   try {
@@ -71,6 +72,18 @@ async function removeTimedOutPlayer(ctx: any, tableId: any, agentId: any) {
 
     const seat = table.seats[seatIndex];
     if (!seat) return;
+
+    // Check if player is all-in in current hand
+    if (table.currentHandId) {
+      const hand = await ctx.db.get(table.currentHandId);
+      if (hand && hand.status !== "complete") {
+        const player = hand.players.find((p: any) => p.agentId === agentId);
+        if (player && player.allIn) {
+          console.log(`Player ${agentId} is all-in, not removing until hand completes`);
+          return; // Don't remove yet, they have chips in pot
+        }
+      }
+    }
 
     console.log(`Removing timed-out player ${agentId} from table ${tableId}`);
 
@@ -90,9 +103,22 @@ async function removeTimedOutPlayer(ctx: any, tableId: any, agentId: any) {
     );
     const newStatus = activePlayers.length >= 2 ? table.status : "waiting";
 
+    // If removed player was dealer, rotate dealer button
+    let newDealerSeat = table.dealerSeat;
+    if (table.dealerSeat === seatIndex) {
+      console.log(`Removed player was dealer, rotating button`);
+      let rotations = 0;
+      newDealerSeat = (table.dealerSeat + 1) % table.maxSeats;
+      while (newSeats[newDealerSeat] === null && rotations < table.maxSeats) {
+        newDealerSeat = (newDealerSeat + 1) % table.maxSeats;
+        rotations++;
+      }
+    }
+
     await ctx.db.patch(tableId, {
       seats: newSeats,
       status: newStatus,
+      dealerSeat: newDealerSeat,
     });
 
     console.log(`Player ${agentId} removed from table. ${activePlayers.length} active players remaining.`);

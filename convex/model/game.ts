@@ -17,6 +17,18 @@ export async function startHand(
   const table = await ctx.db.get(tableId);
   if (!table) throw new Error("Table not found");
 
+  // Validate preconditions to prevent concurrent hand starts
+  if (table.status === "playing") {
+    throw new Error("Cannot start hand: table is already playing");
+  }
+
+  if (table.currentHandId !== undefined) {
+    const existingHand = await ctx.db.get(table.currentHandId);
+    if (existingHand && existingHand.status !== "complete") {
+      throw new Error("Cannot start hand: current hand still in progress");
+    }
+  }
+
   // Get active players (not sitting out, with chips)
   const activePlayers = table.seats
     .map((seat, index) => ({ seat, index }))
@@ -43,6 +55,7 @@ export async function startHand(
       totalBet: 0,
       folded: false,
       allIn: false,
+      hasActed: false,
     };
   });
 
@@ -143,6 +156,7 @@ async function postBlinds(
       totalBet: sbAmount,
       stack: updatedPlayers[sbPlayerIndex].stack - sbAmount,
       allIn: updatedPlayers[sbPlayerIndex].stack - sbAmount === 0,
+      hasActed: false, // Blinds are forced, haven't had option yet
     };
     pot += sbAmount;
   }
@@ -159,6 +173,7 @@ async function postBlinds(
       totalBet: bbAmount,
       stack: updatedPlayers[bbPlayerIndex].stack - bbAmount,
       allIn: updatedPlayers[bbPlayerIndex].stack - bbAmount === 0,
+      hasActed: false, // Blinds are forced, BB needs option to raise
     };
     pot += bbAmount;
   }
@@ -223,13 +238,14 @@ export async function processAction(
   // Validate and process action
   switch (action) {
     case "fold":
-      updatedPlayers[playerIndex] = { ...player, folded: true };
+      updatedPlayers[playerIndex] = { ...player, folded: true, hasActed: true };
       break;
 
     case "check":
       if (player.currentBet < hand.currentBet) {
         throw new Error("Cannot check - must call or raise");
       }
+      updatedPlayers[playerIndex] = { ...player, hasActed: true };
       break;
 
     case "call": {
@@ -240,6 +256,7 @@ export async function processAction(
         totalBet: player.totalBet + callAmount,
         stack: player.stack - callAmount,
         allIn: player.stack - callAmount === 0,
+        hasActed: true,
       };
       newPot += callAmount;
       break;
@@ -267,13 +284,20 @@ export async function processAction(
         totalBet: player.totalBet + additionalAmount,
         stack: player.stack - additionalAmount,
         allIn: player.stack - additionalAmount === 0,
+        hasActed: true,
       };
       newPot += additionalAmount;
 
-      // Update raise tracking
+      // Update raise tracking - only if this is a full raise
       const raiseAmount = totalBetAmount - hand.currentBet;
       newCurrentBet = totalBetAmount;
-      newLastRaiseAmount = raiseAmount;
+      if (totalBetAmount >= minRaise) {
+        // Full raise - update lastRaiseAmount
+        newLastRaiseAmount = raiseAmount;
+      } else {
+        // Short all-in - don't update lastRaiseAmount
+        newLastRaiseAmount = hand.lastRaiseAmount;
+      }
       break;
     }
 
@@ -286,12 +310,21 @@ export async function processAction(
         totalBet: player.totalBet + allInAmount,
         stack: 0,
         allIn: true,
+        hasActed: true,
       };
       newPot += allInAmount;
       if (newBet > newCurrentBet) {
         const raiseAmount = newBet - newCurrentBet;
         newCurrentBet = newBet;
-        newLastRaiseAmount = raiseAmount;
+
+        // Only update lastRaiseAmount if this is a full raise
+        const lastRaise = hand.lastRaiseAmount ?? table.bigBlind;
+        const minRaise = hand.currentBet + lastRaise;
+        if (newBet >= minRaise) {
+          // Full raise
+          newLastRaiseAmount = raiseAmount;
+        }
+        // else: Short all-in, don't update lastRaiseAmount
       }
       break;
     }
@@ -349,40 +382,28 @@ function findNextToAct(
   currentIndex: number,
   currentBet: number
 ): { nextPlayerIndex: number | undefined; roundComplete: boolean } {
-  const activePlayers = players
-    .map((p, i) => ({ ...p, index: i }))
-    .filter((p) => !p.folded && !p.allIn);
+  const activePlayers = players.filter((p) => !p.folded && !p.allIn);
 
   if (activePlayers.length === 0) {
     return { nextPlayerIndex: undefined, roundComplete: true };
   }
 
-  // Find next player who hasn't matched the bet
+  // Find next player who needs to act
   for (let i = 1; i <= players.length; i++) {
     const nextIndex = (currentIndex + i) % players.length;
     const player = players[nextIndex];
-    if (!player.folded && !player.allIn && player.currentBet < currentBet) {
+
+    if (player.folded || player.allIn) continue;
+
+    // Player needs to act if:
+    // 1. They haven't matched the current bet, OR
+    // 2. They haven't acted yet this street (treat undefined as false for backwards compatibility)
+    if (player.currentBet < currentBet || !player.hasActed) {
       return { nextPlayerIndex: nextIndex, roundComplete: false };
     }
   }
 
-  // Check if betting round is complete (everyone has acted and matched)
-  const playersToCheck = players.filter((p) => !p.folded && !p.allIn);
-  const allMatched = playersToCheck.every((p) => p.currentBet === currentBet);
-  
-  if (allMatched) {
-    return { nextPlayerIndex: undefined, roundComplete: true };
-  }
-
-  // Find next active player
-  for (let i = 1; i <= players.length; i++) {
-    const nextIndex = (currentIndex + i) % players.length;
-    const player = players[nextIndex];
-    if (!player.folded && !player.allIn) {
-      return { nextPlayerIndex: nextIndex, roundComplete: false };
-    }
-  }
-
+  // All active players have matched bet AND acted
   return { nextPlayerIndex: undefined, roundComplete: true };
 }
 
@@ -393,8 +414,8 @@ async function advanceStreet(
   players: Hand["players"],
   pot: number
 ): Promise<void> {
-  // Reset current bets for new street
-  const resetPlayers = players.map((p) => ({ ...p, currentBet: 0 }));
+  // Reset current bets and hasActed for new street
+  const resetPlayers = players.map((p) => ({ ...p, currentBet: 0, hasActed: false }));
 
   // Deal community cards
   let { deck, communityCards, status: currentStatus } = hand;
@@ -467,16 +488,19 @@ async function advanceStreet(
 /**
  * Calculate side pots using threshold-based algorithm
  * Returns array of side pots with eligible players for each
+ * IMPORTANT: Includes chips from ALL players (including folded) in pot amounts
  */
 function calculateSidePots(players: Hand["players"]): {
   amount: number;
   eligiblePlayers: Id<"agents">[];
 }[] {
-  const activePlayers = players.filter((p) => !p.folded);
-  if (activePlayers.length === 0) return [];
+  // Use ALL players for pot calculation (including folded)
+  // Only non-folded players can WIN, but folded chips must be in the pot
+  const allPlayers = players;
+  if (allPlayers.length === 0) return [];
 
-  // Sort players by total bet amount (lowest to highest)
-  const sortedByBet = [...activePlayers].sort((a, b) => a.totalBet - b.totalBet);
+  // Sort by total bet (including folded players)
+  const sortedByBet = [...allPlayers].sort((a, b) => a.totalBet - b.totalBet);
 
   const sidePots: { amount: number; eligiblePlayers: Id<"agents">[] }[] = [];
   let previousThreshold = 0;
@@ -487,15 +511,17 @@ function calculateSidePots(players: Hand["players"]): {
     // Skip if this player bet the same as previous (already included in that pot)
     if (threshold === previousThreshold) continue;
 
-    // Players who bet at least this threshold can compete for this pot
-    const eligiblePlayers = activePlayers
-      .filter((p) => p.totalBet >= threshold)
+    // Pot amount includes ALL players (folded or not) who bet at this threshold
+    const contributingPlayers = allPlayers.filter((p) => p.totalBet >= threshold);
+    const potAmount = (threshold - previousThreshold) * contributingPlayers.length;
+
+    // Eligibility: Only non-folded players can WIN, but pot includes folded chips
+    const eligiblePlayers = contributingPlayers
+      .filter((p) => !p.folded)
       .map((p) => p.agentId);
 
-    // Calculate pot amount: (threshold - previousThreshold) * number of eligible players
-    const potAmount = (threshold - previousThreshold) * eligiblePlayers.length;
-
-    if (potAmount > 0) {
+    // Only create pot if there are eligible winners (but pot includes folded chips)
+    if (potAmount > 0 && eligiblePlayers.length > 0) {
       sidePots.push({
         amount: potAmount,
         eligiblePlayers,
@@ -528,6 +554,11 @@ async function showdown(
   // Sort by hand strength (best first)
   evaluated.sort((a, b) => compareHands(b.handRank, a.handRank));
 
+  // Get table for dealer seat info (for odd chip distribution)
+  const table = await ctx.db.get(tableId);
+  const dealerSeat = table?.dealerSeat ?? 0;
+  const maxSeats = table?.maxSeats ?? 9;
+
   // Calculate side pots
   const sidePots = calculateSidePots(players);
 
@@ -551,6 +582,9 @@ async function showdown(
 
     // Split pot among tied winners
     const winAmount = Math.floor(sidePot.amount / tiedWinners.length);
+    const remainder = sidePot.amount - (winAmount * tiedWinners.length);
+
+    // Award base amount to all tied winners
     for (const { player, handRank } of tiedWinners) {
       const currentWinnings = totalWinnings.get(player.agentId) || 0;
       totalWinnings.set(player.agentId, currentWinnings + winAmount);
@@ -561,6 +595,20 @@ async function showdown(
           `${handRank.name} (${formatHand(player.holeCards)})`
         );
       }
+    }
+
+    // Award odd chip to player closest to dealer button
+    if (remainder > 0) {
+      // Sort tied winners by position relative to dealer (closest first)
+      const sortedByPosition = [...tiedWinners].sort((a, b) => {
+        const aDistance = (a.player.seatIndex - dealerSeat + maxSeats) % maxSeats;
+        const bDistance = (b.player.seatIndex - dealerSeat + maxSeats) % maxSeats;
+        return aDistance - bDistance;
+      });
+
+      const oddChipWinner = sortedByPosition[0].player.agentId;
+      const current = totalWinnings.get(oddChipWinner) || 0;
+      totalWinnings.set(oddChipWinner, current + remainder);
     }
   }
 

@@ -80,6 +80,7 @@ export default defineSchema({
         totalBet: v.number(), // Total bet this hand
         folded: v.boolean(),
         allIn: v.boolean(),
+        hasActed: v.optional(v.boolean()), // Track if player has acted this street
       })
     ),
     pot: v.number(),
@@ -91,7 +92,7 @@ export default defineSchema({
     ),
     currentBet: v.number(), // Current bet to call
     lastRaiseAmount: v.optional(v.number()), // Size of last raise for min-raise calculation
-    actionOn: v.optional(v.number()), // Seat index of player to act
+    actionOn: v.optional(v.number()), // Player index in players array (NOT seat index)
     lastAction: v.optional(
       v.object({
         agentId: v.id("agents"),

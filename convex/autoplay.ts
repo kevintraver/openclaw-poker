@@ -40,10 +40,22 @@ export const maybeStartHand = internalMutation({
 
       // Start the next hand
       try {
+        // Double-check status right before calling (minimize TOCTOU window)
+        const freshTable = await ctx.db.get(table._id);
+        if (!freshTable || freshTable.status !== "between_hands") {
+          continue;
+        }
+
         console.log(`Auto-starting hand at table ${table._id} (${table.name})`);
         await startHand(ctx, table._id);
       } catch (error) {
-        console.error(`Failed to auto-start hand at table ${table._id}: ${error}`);
+        // Handle "already playing" errors gracefully (expected in concurrent scenarios)
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes("already playing") || errorMessage.includes("still in progress")) {
+          console.log(`Table ${table._id} already started by another process`);
+        } else {
+          console.error(`Failed to auto-start hand at table ${table._id}: ${error}`);
+        }
       }
     }
   },

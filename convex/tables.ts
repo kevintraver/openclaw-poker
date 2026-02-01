@@ -353,23 +353,15 @@ export const startNewHand = mutation({
     tableId: v.id("tables"),
   },
   handler: async (ctx, { tableId }) => {
-    const table = await ctx.db.get(tableId);
-    if (!table) throw new Error("Table not found");
-
-    if (table.status === "playing") {
-      throw new Error("Hand already in progress");
+    // Let startHand() validate everything atomically
+    try {
+      const handId = await startHand(ctx, tableId);
+      return { handId };
+    } catch (error) {
+      // Re-throw with user-friendly message
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Cannot start hand: ${errorMessage}`);
     }
-
-    const activePlayers = table.seats.filter(
-      (s) => s !== null && !s.sittingOut && s.stack > 0
-    );
-
-    if (activePlayers.length < 2) {
-      throw new Error("Need at least 2 players");
-    }
-
-    const handId = await startHand(ctx, tableId);
-    return { handId };
   },
 });
 
