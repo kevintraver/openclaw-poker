@@ -242,6 +242,16 @@ export default function TablePage({ params }: { params: Promise<{ id: string }> 
                       <span className="chip-icon scale-75"></span>
                       <span>{handPlayer?.stack ?? seat.stack}</span>
                     </div>
+
+                    {/* Show hole cards for spectators */}
+                    {handPlayer && handPlayer.holeCards && handPlayer.holeCards.length > 0 && (
+                      <div className="flex gap-1 mb-2 justify-center">
+                        {handPlayer.holeCards.map((card, i) => (
+                          <Card key={i} card={card} size="small" hidden={handPlayer.folded} />
+                        ))}
+                      </div>
+                    )}
+
                     {handPlayer && (
                       <>
                         {handPlayer.currentBet > 0 && !handPlayer.folded && (

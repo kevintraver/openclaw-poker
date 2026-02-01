@@ -60,8 +60,7 @@ export const getState = query({
     if (table.currentHandId) {
       const hand = await ctx.db.get(table.currentHandId);
       if (hand) {
-        // Observer view - only show hole cards if hand went to showdown (not if ended by folds)
-        const wentToShowdown = hand.status === "complete" && hand.communityCards.length >= 3;
+        // Observer view - show all hole cards for spectators
         currentHand = {
           handId: hand._id,
           handNumber: hand.handNumber,
@@ -76,7 +75,7 @@ export const getState = query({
             currentBet: p.currentBet,
             folded: p.folded,
             allIn: p.allIn,
-            holeCards: wentToShowdown ? p.holeCards : undefined,
+            holeCards: p.holeCards, // Always show hole cards for spectators
           })),
           lastAction: hand.lastAction,
           winners: hand.winners,
