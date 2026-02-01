@@ -18,8 +18,9 @@ interface GameState {
   yourCards?: string[];
   yourChips?: number;
   validActions?: Array<{
-    type: string;
-    amount?: number;
+    action: string;
+    minAmount?: number;
+    maxAmount?: number;
   }>;
 }
 
@@ -86,10 +87,9 @@ export class BotPlayer {
     const tables = response.data.tables;
 
     // Find tables with space, affordable min buy-in, and prefer tables with players
-    // Leave at least 1 empty seat for real players
     const availableTables = tables
       .filter(t =>
-        t.players < t.maxSeats - 1 &&
+        t.players < t.maxSeats &&
         t.minBuyIn <= this.shells
       )
       .sort((a, b) => b.players - a.players);
@@ -155,7 +155,7 @@ export class BotPlayer {
   async getGameState(): Promise<GameState | null> {
     if (!this.tableId) return null;
 
-    const response = await this.api.get<GameState>(
+    const response = await this.api.get<{ table: any; hand: GameState }>(
       `/tables/${this.tableId}/state`,
       this.apiKey
     );
@@ -165,7 +165,8 @@ export class BotPlayer {
       return null;
     }
 
-    return response.data;
+    // Extract the hand data from the response
+    return response.data.hand;
   }
 
   async makeDecision(): Promise<void> {
@@ -188,7 +189,7 @@ export class BotPlayer {
     }
 
     // Select action based on personality
-    const action = selectAction(
+    const selectedAction = selectAction(
       state.validActions,
       this.personality,
       handStrength,
@@ -197,8 +198,8 @@ export class BotPlayer {
     );
 
     this.log(
-      `Hand strength: ${handStrength.toFixed(2)}, Action: ${action.type}${
-        action.amount ? ` (${action.amount})` : ''
+      `Hand strength: ${handStrength.toFixed(2)}, Action: ${selectedAction.action}${
+        selectedAction.amount ? ` (${selectedAction.amount})` : ''
       }`,
       'debug'
     );
@@ -207,10 +208,10 @@ export class BotPlayer {
     await randomDelay(this.config.actionDelayMin, this.config.actionDelayMax);
 
     // Take action
-    await this.takeAction(action);
+    await this.takeAction(selectedAction);
   }
 
-  async takeAction(action: { type: string; amount?: number }): Promise<void> {
+  async takeAction(action: { action: string; amount?: number }): Promise<void> {
     if (!this.tableId) return;
 
     const response = await this.api.post(

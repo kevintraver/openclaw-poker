@@ -57,7 +57,9 @@ export const PERSONALITIES: Record<string, Personality> = {
 };
 
 export interface Action {
-  type: string;
+  action: string;
+  minAmount?: number;
+  maxAmount?: number;
   amount?: number;
 }
 
@@ -67,30 +69,40 @@ export function selectAction(
   handStrength: number,
   pot: number,
   stack: number
-): Action {
+): { action: string; amount?: number } {
   // Random personality - truly random
   if (personality.type === 'random') {
-    return validActions[Math.floor(Math.random() * validActions.length)];
+    const selected = validActions[Math.floor(Math.random() * validActions.length)];
+    return {
+      action: selected.action,
+      amount: selected.minAmount,
+    };
   }
 
-  const canFold = validActions.some(a => a.type === 'fold');
-  const canCheck = validActions.some(a => a.type === 'check');
-  const canCall = validActions.some(a => a.type === 'call');
-  const canRaise = validActions.some(a => a.type === 'raise' || a.type === 'bet');
-  const canAllIn = validActions.some(a => a.type === 'all-in');
+  const canFold = validActions.some(a => a.action === 'fold');
+  const canCheck = validActions.some(a => a.action === 'check');
+  const canCall = validActions.some(a => a.action === 'call');
+  const canRaise = validActions.some(a => a.action === 'raise' || a.action === 'bet');
+  const canAllIn = validActions.some(a => a.action === 'all-in');
+
+  // Helper to convert API action to bot action
+  const toAction = (a: Action): { action: string; amount?: number } => ({
+    action: a.action,
+    amount: a.minAmount,
+  });
 
   // Decide if we should fold based on hand strength
   if (handStrength < personality.foldThreshold) {
     // Weak hand
     if (canCheck) {
-      return validActions.find(a => a.type === 'check')!;
+      return toAction(validActions.find(a => a.action === 'check')!);
     }
     if (canFold) {
       // Sometimes call anyway (calling station behavior)
       if (Math.random() < personality.callFrequency && canCall) {
-        return validActions.find(a => a.type === 'call')!;
+        return toAction(validActions.find(a => a.action === 'call')!);
       }
-      return validActions.find(a => a.type === 'fold')!;
+      return toAction(validActions.find(a => a.action === 'fold')!);
     }
   }
 
@@ -100,30 +112,30 @@ export function selectAction(
 
   if ((handStrength > 0.7 || isBluffing) && canRaise && Math.random() < personality.raiseFrequency) {
     // Raise/bet
-    const raiseAction = validActions.find(a => a.type === 'raise' || a.type === 'bet');
-    if (raiseAction) return raiseAction;
+    const raiseAction = validActions.find(a => a.action === 'raise' || a.action === 'bet');
+    if (raiseAction) return toAction(raiseAction);
   }
 
   // All-in on very strong hands or desperate bluffs
   if (canAllIn && handStrength > 0.85 && Math.random() < personality.aggressionLevel) {
-    return validActions.find(a => a.type === 'all-in')!;
+    return toAction(validActions.find(a => a.action === 'all-in')!);
   }
 
   // Call if possible and willing
   if (canCall && Math.random() < personality.callFrequency) {
-    return validActions.find(a => a.type === 'call')!;
+    return toAction(validActions.find(a => a.action === 'call')!);
   }
 
   // Check if free
   if (canCheck) {
-    return validActions.find(a => a.type === 'check')!;
+    return toAction(validActions.find(a => a.action === 'check')!);
   }
 
   // Fold if nothing else
   if (canFold) {
-    return validActions.find(a => a.type === 'fold')!;
+    return toAction(validActions.find(a => a.action === 'fold')!);
   }
 
   // Fallback - return first valid action
-  return validActions[0];
+  return toAction(validActions[0]);
 }
