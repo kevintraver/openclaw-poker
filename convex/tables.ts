@@ -347,6 +347,22 @@ export const action = mutation({
     if (!table) throw new Error("Table not found");
     if (!table.currentHandId) throw new Error("No active hand");
 
+    // Check if the current action has timed out - if so, process the timeout first
+    const hand = await ctx.db.get(table.currentHandId);
+    if (hand && hand.actionDeadline && Date.now() > hand.actionDeadline) {
+      // Deadline expired - process auto-action for the player whose turn it is
+      const playerIndex = hand.actionOn;
+      if (playerIndex !== undefined) {
+        const player = hand.players[playerIndex];
+        if (player && !player.folded && !player.allIn) {
+          const canCheck = player.currentBet >= hand.currentBet;
+          const autoAction = canCheck ? "check" : "fold";
+          await processAction(ctx, table.currentHandId, player.agentId, autoAction, undefined, "timeout");
+          throw new Error(`Action deadline expired - auto-${autoAction} processed. Please wait for your next turn.`);
+        }
+      }
+    }
+
     await processAction(ctx, table.currentHandId, agentId, action, amount);
 
     return { success: true };
