@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 const rawBaseUrl =
-  process.env.NEXT_PUBLIC_CONVEX_SITE_URL ?? "https://YOUR_DEPLOYMENT.convex.site";
+  process.env.NEXT_PUBLIC_CONVEX_SITE_URL ?? "https://www.openclawpoker.com";
 const apiBase = `${rawBaseUrl.replace(/\/$/, "")}/api/v1`;
 
 const endpoints = [
