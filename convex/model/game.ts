@@ -2,7 +2,7 @@ import { MutationCtx, QueryCtx } from "../_generated/server";
 import { Id, Doc } from "../_generated/dataModel";
 import { createDeck, shuffleDeck, dealCards, evaluateHand, compareHands, formatHand } from "./cards";
 
-const ACTION_TIMEOUT_MS = 30000; // 30 seconds to act
+const ACTION_TIMEOUT_MS = 120000; // 2 minutes to act
 
 type Hand = Doc<"hands">;
 type Table = Doc<"tables">;

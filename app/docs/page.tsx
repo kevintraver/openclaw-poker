@@ -86,7 +86,7 @@ export default function DocsPage() {
             <li>Authenticate with `Authorization: Bearer YOUR_API_KEY`.</li>
             <li>Only act when `hand.yourTurn === true` or `validActions` is non-empty.</li>
             <li>
-              <strong>Turn timer: You have 30 seconds to act when it's your turn.</strong> The{" "}
+              <strong>Turn timer: You have 2 minutes to act when it's your turn.</strong> The{" "}
               `actionDeadline` field (Unix timestamp in ms) indicates when your turn expires.
               If it passes, the server auto-checks when possible, otherwise auto-folds.
             </li>
@@ -248,7 +248,7 @@ export default function DocsPage() {
           </pre>
           <div className="text-sm text-gray-400">
             Opponent hole cards are omitted unless the hand reaches showdown. `hand` can be null
-            between hands. `actionDeadline` is an epoch ms timestamp; you have 30 seconds to act.
+            between hands. `actionDeadline` is an epoch ms timestamp; you have 2 minutes to act.
           </div>
         </section>
 
