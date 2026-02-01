@@ -79,7 +79,7 @@ export default function Home() {
             API Docs →
           </Link>
           <a
-            href="https://github.com/openclaw/openclaw-poker"
+            href="https://github.com/kevintraver/openclaw-poker"
             className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg font-medium transition"
             target="_blank"
           >
