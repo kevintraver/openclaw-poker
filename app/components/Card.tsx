@@ -1,5 +1,7 @@
 "use client";
 
+import SvgCard from "@heruka_urgyen/react-playing-cards/lib/TcN";
+
 interface CardProps {
   card: string; // "As", "Kh", etc.
   hidden?: boolean;
@@ -7,30 +9,31 @@ interface CardProps {
   animate?: boolean;
 }
 
-const SUIT_SYMBOLS: Record<string, string> = {
-  s: "♠",
-  h: "♥",
-  d: "♦",
-  c: "♣",
-};
-
-const SUIT_COLORS: Record<string, string> = {
-  s: "text-gray-800",
-  h: "text-red-600",
-  d: "text-red-600",
-  c: "text-gray-800",
-};
-
 export default function Card({ card, hidden = false, size = "medium", animate = false }: CardProps) {
-  const sizeClasses = {
-    small: "w-12 h-16 text-sm",
-    medium: "w-16 h-24 text-xl",
-    large: "w-20 h-28 text-2xl",
+  // Size mapping: convert size names to pixel heights for SVG cards
+  const heights = {
+    small: "64px",
+    medium: "96px",
+    large: "112px",
   };
 
+  const widths = {
+    small: "48px",
+    medium: "64px",
+    large: "80px",
+  };
+
+  // Hidden card: keep custom lobster pattern card back
   if (hidden) {
     return (
-      <div className={`${sizeClasses[size]} ${animate ? "animate-card-deal" : ""}`}>
+      <div
+        className={animate ? "animate-card-deal" : ""}
+        style={{
+          width: widths[size],
+          height: heights[size],
+          display: "inline-block"
+        }}
+      >
         <div className="w-full h-full rounded-lg bg-gradient-to-br from-purple-600 via-purple-700 to-purple-900 border-2 border-purple-500 shadow-xl flex items-center justify-center relative overflow-hidden">
           {/* Card back pattern */}
           <div className="absolute inset-0 opacity-20">
@@ -52,47 +55,22 @@ export default function Card({ card, hidden = false, size = "medium", animate = 
     return null;
   }
 
-  const rank = card.slice(0, -1);
-  const suit = card.slice(-1).toLowerCase();
-  const symbol = SUIT_SYMBOLS[suit] || suit;
-  const colorClass = SUIT_COLORS[suit] || "text-gray-800";
-
-  const rankSizeClass = {
-    small: "text-lg",
-    medium: "text-2xl",
-    large: "text-3xl",
-  };
-
-  const suitSizeClass = {
-    small: "text-xl",
-    medium: "text-3xl",
-    large: "text-4xl",
-  };
-
+  // Render SVG card with animation and hover effects
   return (
     <div
-      className={`${sizeClasses[size]} ${animate ? "animate-card-deal" : ""} transition-transform hover:scale-105`}
+      className={`${animate ? "animate-card-deal" : ""} transition-transform hover:scale-105 inline-block`}
+      style={{ lineHeight: 0 }}
     >
-      <div className="w-full h-full bg-white rounded-lg border-2 border-gray-300 shadow-xl hover:shadow-2xl transition-shadow relative">
-        {/* Top-left rank and suit */}
-        <div className={`absolute top-1 left-1 flex flex-col items-center leading-none ${colorClass}`}>
-          <div className={`font-bold ${rankSizeClass[size]}`}>{rank}</div>
-          <div className={suitSizeClass[size]}>{symbol}</div>
-        </div>
-
-        {/* Center suit */}
-        <div className={`absolute inset-0 flex items-center justify-center ${colorClass}`}>
-          <div className={suitSizeClass[size]} style={{ fontSize: size === "large" ? "4rem" : size === "medium" ? "3rem" : "2rem" }}>
-            {symbol}
-          </div>
-        </div>
-
-        {/* Bottom-right rank and suit (rotated) */}
-        <div className={`absolute bottom-1 right-1 flex flex-col items-center leading-none ${colorClass} rotate-180`}>
-          <div className={`font-bold ${rankSizeClass[size]}`}>{rank}</div>
-          <div className={suitSizeClass[size]}>{symbol}</div>
-        </div>
-      </div>
+      <SvgCard
+        card={card}
+        height={heights[size]}
+        style={{
+          display: "block",
+          borderRadius: "0.5rem",
+          filter: "drop-shadow(0 10px 15px rgba(0, 0, 0, 0.2))"
+        }}
+        className="hover:drop-shadow-2xl transition-all"
+      />
     </div>
   );
 }
