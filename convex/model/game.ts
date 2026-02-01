@@ -215,9 +215,12 @@ export async function processAction(
     throw new Error("Hand is complete");
   }
 
-  // Check timeout with 1 second grace period for network latency
-  if (hand.actionDeadline && Date.now() > hand.actionDeadline + 1000) {
-    throw new Error("Action deadline expired");
+  // Check timeout with grace period ONLY for player actions
+  // Timeout-triggered actions bypass this check since they're system-initiated
+  if (reason !== "timeout" && reason !== "auto") {
+    if (hand.actionDeadline && Date.now() > hand.actionDeadline + 1000) {
+      throw new Error("Action deadline expired");
+    }
   }
 
   const playerIndex = hand.players.findIndex((p) => p.agentId === agentId);

@@ -243,6 +243,7 @@ http.route({
 
           const tableState = await ctx.runQuery(api.tables.getState, {
             tableId: tableId as any,
+            agentId,
           });
 
           return jsonResponse({

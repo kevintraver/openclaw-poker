@@ -82,16 +82,51 @@ async function removeTimedOutPlayer(ctx: any, tableId: any, agentId: any) {
           console.log(`Player ${agentId} is all-in, not removing until hand completes`);
           return; // Don't remove yet, they have chips in pot
         }
+
+        // If player is in an active hand, refund their ACTUAL stack (not seat stack)
+        // because chips they bet are still in the pot
+        if (player) {
+          console.log(`Removing timed-out player ${agentId} from table ${tableId} (mid-hand)`);
+
+          // Return ACTUAL remaining chips (after bets) to agent
+          const agent = await ctx.db.get(agentId);
+          if (agent) {
+            await ctx.db.patch(agentId, {
+              shells: agent.shells + player.stack
+            });
+          }
+        } else {
+          // Player not in current hand (already folded), seat.stack is correct
+          console.log(`Removing timed-out player ${agentId} from table ${tableId} (already folded)`);
+          const agent = await ctx.db.get(agentId);
+          if (agent) {
+            await ctx.db.patch(agentId, { shells: agent.shells + seat.stack });
+          }
+        }
+      } else {
+        // Hand is complete, use seat.stack (already updated by awardWinnings)
+        console.log(`Removing timed-out player ${agentId} from table ${tableId} (between hands)`);
+        const agent = await ctx.db.get(agentId);
+        if (agent) {
+          await ctx.db.patch(agentId, { shells: agent.shells + seat.stack });
+        }
+      }
+    } else {
+      // No active hand, seat.stack is correct
+      console.log(`Removing timed-out player ${agentId} from table ${tableId} (no hand)`);
+      const agent = await ctx.db.get(agentId);
+      if (agent) {
+        await ctx.db.patch(agentId, { shells: agent.shells + seat.stack });
       }
     }
 
     console.log(`Removing timed-out player ${agentId} from table ${tableId}`);
 
-    // Return chips to agent
-    const agent = await ctx.db.get(agentId);
-    if (agent) {
-      await ctx.db.patch(agentId, { shells: agent.shells + seat.stack });
-    }
+    // Return chips to agent - REMOVED (handled above based on game state)
+    // const agent = await ctx.db.get(agentId);
+    // if (agent) {
+    //   await ctx.db.patch(agentId, { shells: agent.shells + seat.stack });
+    // }
 
     // Clear the seat
     const newSeats = [...table.seats];

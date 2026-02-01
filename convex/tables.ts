@@ -51,8 +51,9 @@ export const list = query({
 export const getState = query({
   args: {
     tableId: v.id("tables"),
+    agentId: v.optional(v.id("agents")),
   },
-  handler: async (ctx, { tableId }) => {
+  handler: async (ctx, { tableId, agentId }) => {
     const table = await ctx.db.get(tableId);
     if (!table) return null;
 
@@ -60,7 +61,7 @@ export const getState = query({
     if (table.currentHandId) {
       const hand = await ctx.db.get(table.currentHandId);
       if (hand) {
-        // Observer view - show all hole cards for spectators
+        // Filter hole cards based on viewer
         currentHand = {
           handId: hand._id,
           handNumber: hand.handNumber,
@@ -69,14 +70,21 @@ export const getState = query({
           communityCards: hand.communityCards,
           currentBet: hand.currentBet,
           actionOn: hand.actionOn,
-          players: hand.players.map((p) => ({
-            seatIndex: p.seatIndex,
-            stack: p.stack,
-            currentBet: p.currentBet,
-            folded: p.folded,
-            allIn: p.allIn,
-            holeCards: p.holeCards, // Always show hole cards for spectators
-          })),
+          players: hand.players.map((p) => {
+            // Determine if we should show this player's hole cards
+            const isThisPlayer = agentId && p.agentId === agentId;
+            const wentToShowdown = hand.status === "complete" && hand.communityCards.length >= 3;
+            const shouldShowCards = !agentId || isThisPlayer || wentToShowdown;
+
+            return {
+              seatIndex: p.seatIndex,
+              stack: p.stack,
+              currentBet: p.currentBet,
+              folded: p.folded,
+              allIn: p.allIn,
+              holeCards: shouldShowCards ? p.holeCards : undefined,
+            };
+          }),
           lastAction: hand.lastAction,
           winners: hand.winners,
         };
